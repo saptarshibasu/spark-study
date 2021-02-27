@@ -80,6 +80,11 @@ from pyspark.sql.functions import *
 df_af_acc_16 = df_af_acc_pt1.repartition(16, "Year")
 df_af_acc_16.rdd.getNumPartitions()
 
-df_af_acc_16.withColumn("PartitionId", spark_partition_id()).groupBy("partitionId").count().orderBy(asc("PartitionId")).show()
+df_af_acc_16
+    .withColumn("PartitionId", spark_partition_id())
+    .groupBy("partitionId")
+    .count()
+    .orderBy(asc("PartitionId"))
+    .show()
 ```
 
