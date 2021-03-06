@@ -106,6 +106,7 @@ df_af_acc_16 \
 
 ### Bucketing a Dataframe
 
+```
 from pyspark.sql.functions import *
 
 df_covid = spark.read.csv(
@@ -123,9 +124,11 @@ df_covid \
     .format("parquet") \
     .bucketBy(5, "Country/Region") \
     .saveAsTable("CovidParquet")
+```
 
 ### Partitioning a Dataframe
 
+```
 from pyspark.sql.functions import *
 
 df_covid = spark.read.csv(
@@ -143,3 +146,4 @@ df_covid \
     .format("parquet") \
     .partitionBy("Country/Region") \
     .saveAsTable("CovidParquet")
+```
