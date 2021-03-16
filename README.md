@@ -18,7 +18,7 @@
 
 ## Playing With Dataset
 
-### Load Data into a Dataframr From a CSV File
+### Load Data into a Dataframe From a CSV File
 
 ```
 from pyspark.sql.types import StructType, StructField, IntegerType, DateType, StringType
@@ -147,3 +147,89 @@ df_covid \
     .partitionBy("Country/Region") \
     .saveAsTable("CovidParquet")
 ```
+
+### Structured Streaming with Window & UDF
+
+```
+from pyspark.sql.types import StructType, StructField, IntegerType, DateType, TimestampType
+from pyspark.sql.functions import window, col, sum, max
+from pyspark.sql.functions import udf
+import datetime
+
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+spark.conf.set("spark.sql.shuffle.partitions", 1)
+
+def roundDownDateTime(tm):
+    tm -= datetime.timedelta(minutes = tm.minute % 10, seconds = tm.second)
+    return tm
+
+def roundUpDateTime(tm):
+    tm += datetime.timedelta(minutes = 10)
+    tm -= datetime.timedelta(minutes = tm.minute % 10, seconds = tm.second)
+    tm -= datetime.timedelta(minutes = 1)
+    return tm
+
+roundDownDateTimeUdf = udf(roundDownDateTime, TimestampType())
+roundUpDateTimeUdf = udf(roundUpDateTime, TimestampType())
+
+rawcount_schema = StructType(
+    [
+        StructField("Timestamp",TimestampType(),True),
+        StructField("Count",IntegerType(),True)
+    ])
+
+rawcount_read_streaming = spark \
+    .readStream \
+    .option("header", "true") \
+    .schema(rawcount_schema) \
+    .option("timestampFormat", "dd-MM-yyyy HH:mm:ss") \
+    .csv("/opt/data/rawcount")
+
+rawcount_read_streaming = rawcount_read_streaming \
+    .withColumn("Date", rawcount_read_streaming["Timestamp"].cast(DateType())) \
+    .withColumn("WindowStart", roundDownDateTimeUdf(rawcount_read_streaming["Timestamp"])) \
+    .withColumn("WindowEnd", roundUpDateTimeUdf(rawcount_read_streaming["Timestamp"]))
+    
+rawcount_window_query = rawcount_read_streaming \
+    .withWatermark("Timestamp", "2 minutes") \
+    .groupBy(window(col("Timestamp"), "2 minutes")) \
+    .agg(sum("Count").alias("TotalCount"), max("Date").alias("MaxDate"), max("Timestamp").alias("MaxTimestamp"), max("WindowStart").alias("WindowStart"), max("WindowEnd").alias("WindowEnd")) \
+    .select("WindowStart", "WindowEnd", "MaxTimestamp", "MaxDate", "TotalCount" )
+
+rawcount_write_streaming = rawcount_window_query \
+    .writeStream \
+    .option("parquet.block.size", 128) \
+    .option("checkpointLocation", "/opt/spark-checkpoint") \
+    .queryName("rawcountWindowQuery") \
+    .format("parquet") \
+    .outputMode("append") \
+    .partitionBy("MaxDate") \
+    .start("rawcount_aggregates")
+
+rawcount_write_streaming.awaitTermination()
+
+```
+
+### Spark Batch with Window
+
+from pyspark.sql.functions import *
+from pyspark.sql.types import StructType, StructField, IntegerType, DateType, TimestampType
+
+rawcount_schema = StructType(
+    [
+        StructField("Timestamp",TimestampType(),True),
+        StructField("Count",IntegerType(),True)
+    ])
+
+rawcount_df = spark.read.csv(
+       "/opt/data/rawcount/*.csv", \
+       header=True, \
+       schema=rawcount_schema, \
+       timestampFormat="dd-MM-yyyy HH:mm:ss")
+
+rawcount_df \
+    .groupBy(window(col("Timestamp"), "10 minutes")) \
+    .agg(sum("Count").alias("TotalCount"), max("Timestamp").alias("MaxTimestamp")) \
+    .select("TotalCount", "MaxTimestamp") \
+    .show()
+
