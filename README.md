@@ -1,5 +1,20 @@
 # Spark Cheat Sheet
 
+* Spark can
+  * read and write data in a variety of structured formats (e.g., JSON, Hive tables, Parquet, Avro, ORC, CSV)
+  * query data using JDBC / ODBC connectors from RDBMSs, from Azure Blob storage, Azure Data Lake Storage Gen2, Azure Cosmos DB, Azure Synapse Analytics, Cassandra, Couchbase, ElasticSearch, MongoDB etc.
+* `SparkSesion` is used to access Spark functionality. In a Spark shell or Databricks notebook, the `SparkSession` is automatically created and is accesible via a variable named `spark`
+* Spark tables - Dataframes can be saved as persistent tables using the `saveAsTable`. Supports optimization techniques such as partitioning and bucketing. Like dataframes, tables and views can also be cached and uncached
+  * Managed tables - Both table data and metadata are stored in Hive metastore. `DROP TABLE` will delete both the metadata and the table data. It is useful when Spark is used as a DB to visualize the data using a reporting tool as managed tables can be accessed using JDBC / ODBC connector
+  * Unmanaged tables - Only the metadata are stored in the Hive metastore. The data is externally managed outside Spark. A `DROP TABLE` will delete only the table metadata keeping the data untouched. It is useful when Spark is used mainly to process a large volume of data in parallel and the data will stay in an external data store e.g. a data lake
+
+```
+df.write.format("parquet")
+.repartition(13)
+.partitionBy("src")
+.bucketBy(4, "dst", "carrier")
+.saveAsTable("flightsbkdc")
+```
 * `Dataframe` APIs `cache()` vs `persist()` - `cache()` always caches with the default storage level `MEMORY_AND_DISK`, whereas, `persist()` allows to specify the storage level 
 * `Dataframe` APIs `repartition()` vs `coalesce()` - `repartition()` does a fresh repartitioning in memory and it can increase or decrease the number of partitions as indicated by the calling parameters. `coalesce()`, on the other hand`, avoids shuffling, and reduces the number of partitions to the number as indcated by the calling parameters
 * `cache()` or (`persist()`) doesn't caches the dataframe immediately. Usually `cache()` is followed by an operation like `count()` to cache the data
